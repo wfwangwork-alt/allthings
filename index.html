@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>灵魂提示 · Allthings</title>
+  <style>
+    :root {
+      --bg: #f4eee4;
+      --ink: #2c241c;
+      --muted: #7a6d5e;
+      --paper: #fffaf3;
+      --line: #e6d9c8;
+      --accent: #c45c26;
+      --accent-soft: #f3d5c2;
+      --done: #3d7a5a;
+      --done-bg: #e7f3ec;
+      --cancel: #8a5a4a;
+      --cancel-bg: #f6ebe6;
+      --shadow: 0 10px 30px rgba(70, 48, 28, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 500px at 10% -10%, #fbe7d4 0%, transparent 55%),
+        radial-gradient(900px 400px at 100% 0%, #eadfcf 0%, transparent 50%),
+        var(--bg);
+    }
+
+    .wrap {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 40px 20px 80px;
+    }
+
+    header h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      letter-spacing: 0.04em;
+    }
+
+    header p {
+      margin: 0 0 16px;
+      color: var(--muted);
+    }
+
+    .composer {
+      display: flex;
+      gap: 10px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 10px;
+      box-shadow: var(--shadow);
+    }
+
+    .composer input {
+      flex: 1;
+      border: 0;
+      outline: none;
+      background: transparent;
+      font-size: 16px;
+      padding: 12px 10px;
+      color: var(--ink);
+    }
+
+    .composer button,
+    .card-actions button {
+      border: 0;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .composer button {
+      background: var(--accent);
+      color: #fff;
+      border-radius: 12px;
+      padding: 12px 20px;
+    }
+
+    .composer button:hover { filter: brightness(1.05); }
+    .composer button:disabled {
+      opacity: 0.6;
+      cursor: wait;
+      filter: none;
+    }
+
+    .hint {
+      min-height: 22px;
+      margin: 12px 2px 22px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      transition: max-height 0.28s ease, opacity 0.2s ease;
+    }
+
+    .card.folded .body,
+    .card.folded .card-actions {
+      display: none;
+    }
+
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 18px 12px;
+    }
+
+    .badge {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      white-space: nowrap;
+    }
+
+    .card.done .badge {
+      background: var(--done-bg);
+      color: var(--done);
+    }
+
+    .card.cancelled .badge {
+      background: var(--cancel-bg);
+      color: var(--cancel);
+    }
+
+    .quote {
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.5;
+    }
+
+    .body {
+      padding: 0 18px 8px;
+    }
+
+    .tip {
+      margin: 0;
+      padding: 12px 14px;
+      background: #f8efe4;
+      border-left: 3px solid var(--accent);
+      border-radius: 0 10px 10px 0;
+      color: #5b3d28;
+    }
+
+    .time {
+      margin: 10px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 8px;
+      padding: 12px 18px 16px;
+    }
+
+    .card-actions button {
+      border-radius: 10px;
+      padding: 8px 14px;
+    }
+
+    .btn-done {
+      background: var(--done);
+      color: #fff;
+    }
+
+    .btn-cancel {
+      background: transparent;
+      color: var(--cancel);
+      border: 1px solid #e4cfc6 !important;
+    }
+
+    .empty {
+      text-align: center;
+      color: var(--muted);
+      padding: 40px 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>灵魂提示</h1>
+      <p>说一件事，数字秘书会提取标题、时间和一句灵魂提醒。</p>
+    </header>
+
+    <form class="composer" id="form">
+      <input id="input" type="text" placeholder="比如：明天下午去打疫苗…" autocomplete="off" />
+      <button type="submit" id="send">发送</button>
+    </form>
+    <div class="hint" id="hint"></div>
+    <div class="list" id="list"></div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = "allthings-soul-cards-v1";
+    // 后端接口（Vercel Serverless Function：api/chat.js）。
+    // API Key 只存在服务端环境变量 DEEPSEEK_API_KEY 里，前端接触不到。
+    const CHAT_API = "/api/chat";
+
+    const STATUS_TEXT = {
+      pending: "待处理",
+      done: "已完成",
+      cancelled: "已取消"
+    };
+
+    const form = document.getElementById("form");
+    const input = document.getElementById("input");
+    const send = document.getElementById("send");
+    const hint = document.getElementById("hint");
+    const list = document.getElementById("list");
+
+    let cards = loadCards();
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) {
+        hint.textContent = "先写一句要记下的事。";
+        return;
+      }
+
+      hint.textContent = "正在请数字秘书整理…";
+      send.disabled = true;
+      input.disabled = true;
+
+      try {
+        const parsed = await askSecretary(text);
+        // 时间戳由前端自己算：取 AI 给的「相对分钟数」，从此刻起精确相加，
+        // 避免 AI 换算时间戳时把秒数抹零、导致提醒提前。
+        const rawMinutes = parsed.duration_minutes;
+        const durationMinutes = rawMinutes === null || rawMinutes === undefined || rawMinutes === "" || isNaN(Number(rawMinutes))
+          ? null
+          : Number(rawMinutes);
+        const targetTime = durationMinutes === null ? null : Date.now() + durationMinutes * 60 * 1000;
+        cards.unshift({
+          id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+          text,
+          title: String(parsed.title || text).trim() || text,
+          time: String(parsed.time || "无").trim() || "无",
+          tip: String(parsed.tip || "").trim() || "把这件事轻轻放进今天。",
+          durationMinutes,
+          timestamp: targetTime,
+          createdAt: Date.now(),
+          status: "pending",
+          isNotified: false
+        });
+        saveCards();
+        input.value = "";
+        hint.textContent = "";
+        render();
+      } catch (err) {
+        console.error(err);
+        alert(err && err.message ? err.message : "请求失败，请稍后重试。");
+        hint.textContent = "这次没整理成功，可以再发一次。";
+      } finally {
+        send.disabled = false;
+        input.disabled = false;
+        input.focus();
+      }
+    });
+
+    // ===== 后台时间感知：每 10 秒轮询一次「待处理」卡片 =====
+    // 当前时间 >= timestamp，且这张卡片还没提醒过（isNotified 不是 true）时，
+    // 立刻用 alert 弹一次提醒，并把 isNotified 标记为 true 写回 localStorage，
+    // 这样同一张卡片不会无限循环弹窗。
+    function checkDueCards() {
+      let changed = false;
+      cards.forEach((card) => {
+        if (card.status !== "pending") return;
+        if (card.isNotified) return;
+        if (card.timestamp === null || card.timestamp === undefined) return;
+        if (Date.now() < Number(card.timestamp)) return;
+        card.isNotified = true;
+        changed = true;
+        window.alert("灵魂提示：" + card.title + " - " + card.tip);
+      });
+      if (changed) {
+        saveCards();
+        render();
+      }
+    }
+
+    setInterval(checkDueCards, 10000);
+
+    list.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-action]");
+      if (!btn) return;
+      const id = btn.closest(".card").dataset.id;
+      const action = btn.dataset.action;
+      const card = cards.find((c) => c.id === id);
+      if (!card || card.status !== "pending") return;
+      card.status = action === "done" ? "done" : "cancelled";
+      saveCards();
+      render();
+    });
+
+    // 只和自家后端说话：把用户输入发给 /api/chat，由后端带着 API Key 去调 DeepSeek。
+    async function askSecretary(prompt) {
+      let response;
+      try {
+        response = await fetch(CHAT_API, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt })
+        });
+      } catch (err) {
+        throw new Error("网络错误，无法连接后端接口：" + (err && err.message ? err.message : "未知原因"));
+      }
+
+      const raw = await response.text();
+
+      let payload;
+      try {
+        payload = raw ? JSON.parse(raw) : {};
+      } catch (err) {
+        throw new Error("后端返回的不是合法 JSON。");
+      }
+
+      if (!response.ok) {
+        throw new Error(payload && payload.error ? payload.error : "后端请求失败（" + response.status + "）。");
+      }
+
+      if (!payload || typeof payload !== "object") {
+        throw new Error("后端没有返回可用数据。");
+      }
+
+      return payload;
+    }
+
+    function loadCards() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        const data = raw ? JSON.parse(raw) : [];
+        return Array.isArray(data) ? data : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function saveCards() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
+    }
+
+    function formatTime(ts) {
+      const d = new Date(ts);
+      const p = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+    }
+
+    function escapeHtml(str) {
+      return String(str == null ? "" : str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function render() {
+      if (!cards.length) {
+        list.innerHTML = '<div class="empty">还没有卡片。发一句话，让秘书帮你整理。</div>';
+        return;
+      }
+
+      list.innerHTML = cards.map((card) => {
+        const folded = card.status !== "pending";
+        const cls = ["card", card.status, folded ? "folded" : ""].join(" ");
+        const title = card.title || card.text || "未命名";
+        const eventTime = card.time || formatTime(card.createdAt);
+        const actions = card.status === "pending"
+          ? `<div class="card-actions">
+               <button class="btn-done" data-action="done" type="button">完成</button>
+               <button class="btn-cancel" data-action="cancel" type="button">取消</button>
+             </div>`
+          : "";
+        const original = card.text && card.text !== title
+          ? `<p class="time">原话：${escapeHtml(card.text)}</p>`
+          : "";
+        return `
+          <article class="${cls}" data-id="${card.id}">
+            <div class="card-head">
+              <p class="quote">${escapeHtml(title)}</p>
+              <span class="badge">${STATUS_TEXT[card.status]}</span>
+            </div>
+            <div class="body">
+              <p class="tip">${escapeHtml(card.tip || "")}</p>
+              <p class="time">时间：${escapeHtml(eventTime)} · 记录于 ${formatTime(card.createdAt)}</p>
+              ${original}
+            </div>
+            ${actions}
+          </article>
+        `;
+      }).join("");
+    }
+
+    // 页面就绪：渲染卡片
+    render();
+  </script>
+</body>
+</html>
